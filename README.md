@@ -17,8 +17,10 @@ This system monitors water tank depth using a pressure sensor connected to an Ar
 
 ## Tank Specifications
 
-- **Diameter**: 200mm
-- **Surface Area**: 0.0314 m² (π × 0.1²)
+- **Diameter**: 100mm
+- **Depth**: 200mm (maximum)
+- **Volume**: ~1,570 ml (1.57 liters) when full
+- **Surface Area**: 0.00785 m² (π × 0.05²)
 - **Sensor**: Pressure sensor (0.5V - 4.5V = 0-10 kPa)
 
 ## Setup Instructions
@@ -119,13 +121,15 @@ Once everything is running, access the web dashboard at:
 1. **Arduino reads pressure sensor** connected to pin A0
 2. **Converts voltage to pressure** (0.5V-4.5V → 0-10 kPa)
 3. **Calculates water depth** from pressure (1 kPa ≈ 0.102m water)
-4. **Calculates volume** using cylinder formula: V = π × r² × h
-5. **Sends data to server** via HTTP GET request every 5 seconds
-6. **Web dashboard fetches data** every 2 seconds and displays:
+4. **Clamps depth** to tank maximum (200mm) to prevent overflow readings
+5. **Calculates volume** using cylinder formula: V = π × r² × h
+6. **Sends data to server** via HTTP GET request every 5 seconds
+7. **Web dashboard fetches data** every 2 seconds and displays:
    - Visual tank representation with animated water
-   - Water depth in meters
+   - Water depth in millimeters
    - Pressure in kPa
-   - Tank capacity in liters
+   - Tank capacity in milliliters
+   - Tank fill percentage
    - Online/offline status
 
 ## Troubleshooting
@@ -163,7 +167,9 @@ Kill the process or change to a different port in both `tank_server.py` and the 
 When Arduino is running, you should see output like:
 ```
 === Water Tank Sensor with WiFi ===
-Tank diameter: 200mm
+Tank diameter: 100 mm
+Tank depth: 200 mm
+Tank capacity: 1570.8 ml
 Connecting to WiFi: YourNetwork
 .....
 WiFi connected!
@@ -172,8 +178,9 @@ IP address: 192.168.1.123
 --- Measurement ---
 Voltage: 2.345 V
 Pressure: 4.61 kPa
-Water Depth: 0.470 m
-Tank Capacity: 14.77 liters
+Water Depth: 94.2 mm (0.094 m)
+Tank Capacity: 739.3 ml (0.739 liters)
+Tank Level: 47.1 %
 
 Connecting to server: 192.168.55.192
 Server response:
@@ -189,10 +196,22 @@ Edit this line in Arduino code:
 const unsigned long uploadInterval = 5000;  // milliseconds
 ```
 
-### Change Tank Diameter
-Edit this line in Arduino code:
+### Change Tank Diameter and Depth
+Edit these lines in Arduino code:
 ```cpp
-const float TANK_DIAMETER_MM = 200.0f;  // your tank diameter in mm
+const float TANK_DIAMETER_MM = 100.0f;  // your tank diameter in mm
+const float TANK_DEPTH_MM = 200.0f;     // your tank maximum depth in mm
+```
+
+You'll also need to update the HTML page:
+```javascript
+// In index.html, update the max depth for visual scaling
+const maxDepthM = 0.2;  // your tank depth in meters (200mm = 0.2m)
+```
+
+And update the subtitle:
+```html
+<p class="subtitle">100mm Ø × 200mm Deep Tank</p>  <!-- your dimensions -->
 ```
 
 ### Change Server Port
@@ -213,9 +232,13 @@ PORT = 8080
 Arduino sends data via HTTP GET with these parameters:
 - `depth` - Water depth in meters (3 decimal places)
 - `pressure` - Pressure in kPa (2 decimal places)
-- `volume` - Volume in liters (2 decimal places)
+- `volume` - Volume in liters (3 decimal places)
 
-Example: `/update?depth=0.470&pressure=4.61&volume=14.77`
+Example: `/update?depth=0.094&pressure=4.61&volume=0.739`
+
+The web dashboard converts these for display:
+- Depth: meters → millimeters
+- Volume: liters → milliliters
 
 ## License
 

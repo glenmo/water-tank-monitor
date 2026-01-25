@@ -19,3 +19,8 @@
 *.swp
 *.swo
 *~
+
+# Private credentials (never commit)
+.lorawan_credentials.txt
+*credentials*.txt
+secrets.h

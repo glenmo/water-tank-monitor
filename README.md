@@ -1,245 +1,211 @@
-# Water Tank Monitor System
+# Water Tank Monitor
 
-This system monitors water tank depth using a pressure sensor connected to an Arduino UNO R4 WiFi and displays the data on a web dashboard.
+LoRaWAN + WiFi water tank monitoring system for Arduino UNO R4 WiFi with SX1276 LoRa shield.
 
-## Quick Start
+## Features
 
-1. **Arduino**: Edit WiFi credentials in sketch, upload to UNO R4 WiFi
-2. **Raspberry Pi**: Run `python3 tank_server.py` in the tank-monitor directory
-3. **Browser**: Open http://rubberduck.local:8080 or http://192.168.55.192:8080
-4. **Done!** Watch your tank level update in real-time
+- **Dual Connectivity**: LoRaWAN (primary) + WiFi (backup)
+- **LoRaWAN**: AU915 FSB2, OTAA activation, 60-second upload intervals
+- **WiFi**: HTTP uploads every 5 seconds to local server (optional backup)
+- **Sensors**: Analog pressure sensor (0.5-4.5V, 0-10 kPa range)
+- **Measurements**: Pressure, water depth, tank volume
 
-## Components
+## Hardware
 
-1. **water_tank_sensor_wifi.ino** - Arduino sketch for the UNO R4 WiFi
-2. **index.html** - Web dashboard for viewing tank data
-3. **tank_server.py** - Python server to run on Raspberry Pi (rubberduck.local)
+- Arduino UNO R4 WiFi
+- SX1276 LoRaWAN shield
+  - NSS (CS): Pin 10
+  - RST: Pin 9
+  - DIO0: Pin 2
+  - DIO1: Pin 3
+- Analog pressure sensor on A0 pin
 
 ## Tank Specifications
 
 - **Diameter**: 100mm
-- **Depth**: 200mm (maximum)
-- **Volume**: ~1,570 ml (1.57 liters) when full
 - **Surface Area**: 0.00785 m² (π × 0.05²)
 - **Sensor**: Pressure sensor (0.5V - 4.5V = 0-10 kPa)
 
-## Setup Instructions
+## Quick Start
 
-### 1. Arduino UNO R4 WiFi Setup
+### Arduino IDE
 
-**a. Install Required Library:**
-- Open Arduino IDE
-- Go to Sketch > Include Library > Manage Libraries
-- Search for "WiFiS3" (should be pre-installed for UNO R4 WiFi)
+1. Open `water_tank_monitor.ino` in Arduino IDE
+2. Configure LoRaWAN credentials (see [LoRaWAN Setup Guide](docs/LORAWAN_SETUP.md))
+3. Configure WiFi credentials (optional)
+4. Upload to board
 
-**b. Configure WiFi Credentials:**
-Edit these lines in `water_tank_sensor_wifi.ino`:
+### PlatformIO
+
+```bash
+# Build
+pio run
+
+# Build and upload
+pio run --target upload
+
+# Monitor serial output (115200 baud)
+pio device monitor
+```
+
+## Configuration
+
+### LoRaWAN Credentials (Required)
+
+Edit the following in `water_tank_monitor.ino`:
+
 ```cpp
-const char* ssid = "YOUR_WIFI_SSID";        // Your WiFi network name
-const char* password = "YOUR_WIFI_PASSWORD"; // Your WiFi password
+// Application EUI (8 bytes) - LSB format
+static const u1_t PROGMEM APPEUI[8] = { 0x00, ... };
+
+// Device EUI (8 bytes) - LSB format
+static const u1_t PROGMEM DEVEUI[8] = { 0x00, ... };
+
+// Application Key (16 bytes) - MSB format
+static const u1_t PROGMEM APPKEY[16] = { 0x00, ... };
 ```
 
-**c. Hardware Connections:**
-- Connect pressure sensor signal wire to **A0**
-- Connect sensor VCC to **5V**
-- Connect sensor GND to **GND**
+**See [docs/LORAWAN_SETUP.md](docs/LORAWAN_SETUP.md) for detailed credential configuration instructions.**
 
-**d. Upload Sketch:**
-1. Connect Arduino to computer via USB
-2. Select: Tools > Board > Arduino UNO R4 WiFi
-3. Select correct COM port
-4. Click Upload button
+### WiFi Credentials (Optional Backup)
 
-### 2. Raspberry Pi (rubberduck.local) Setup
-
-**a. Copy Files to Raspberry Pi:**
-```bash
-# SSH into your Raspberry Pi
-ssh pi@rubberduck.local
-
-# Create project directory
-mkdir ~/tank-monitor
-cd ~/tank-monitor
-
-# Copy index.html and tank_server.py to this directory
+```cpp
+const char* ssid = "your-wifi-ssid";
+const char* password = "your-wifi-password";
+const char* serverHost = "192.168.x.x";
+const int serverPort = 8080;
 ```
 
-**b. Make Server Script Executable:**
-```bash
-chmod +x tank_server.py
+## LoRaWAN Payload Format
+
+8-byte binary payload (big-endian):
+- **Bytes 0-1**: Voltage (mV) - divide by 1000 for volts
+- **Bytes 2-3**: Pressure (centi-kPa) - divide by 100 for kPa
+- **Bytes 4-5**: Depth (mm) - divide by 1000 for meters
+- **Bytes 6-7**: Volume (centi-liters) - divide by 100 for liters
+
+### Decoder (The Things Network / ChirpStack)
+
+```javascript
+function decodeUplink(input) {
+  var bytes = input.bytes;
+  return {
+    data: {
+      voltage_v: ((bytes[0] << 8) | bytes[1]) / 1000.0,
+      pressure_kpa: ((bytes[2] << 8) | bytes[3]) / 100.0,
+      depth_m: ((bytes[4] << 8) | bytes[5]) / 1000.0,
+      volume_liters: ((bytes[6] << 8) | bytes[7]) / 100.0
+    }
+  };
+}
 ```
-
-**c. Run Server:**
-```bash
-python3 tank_server.py
-```
-
-Note: Port 8080 doesn't require sudo. If port 80 is needed, use `sudo python3 tank_server.py` but you'll need to stop any existing web server first.
-
-**d. Optional: Run Server on Boot**
-Create systemd service file:
-```bash
-sudo nano /etc/systemd/system/tank-monitor.service
-```
-
-Add this content:
-```ini
-[Unit]
-Description=Water Tank Monitor Server
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/home/pi/tank-monitor
-ExecStart=/usr/bin/python3 /home/pi/tank-monitor/tank_server.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Enable and start service:
-```bash
-sudo systemctl enable tank-monitor.service
-sudo systemctl start tank-monitor.service
-```
-
-Check status:
-```bash
-sudo systemctl status tank-monitor.service
-```
-
-### 3. Access the Dashboard
-
-Once everything is running, access the web dashboard at:
-- **http://rubberduck.local:8080** (if mDNS is working)
-- **http://192.168.55.192:8080** (direct IP)
 
 ## How It Works
 
-1. **Arduino reads pressure sensor** connected to pin A0
-2. **Converts voltage to pressure** (0.5V-4.5V → 0-10 kPa)
-3. **Calculates water depth** from pressure (1 kPa ≈ 0.102m water)
-4. **Clamps depth** to tank maximum (200mm) to prevent overflow readings
-5. **Calculates volume** using cylinder formula: V = π × r² × h
-6. **Sends data to server** via HTTP GET request every 5 seconds
-7. **Web dashboard fetches data** every 2 seconds and displays:
-   - Visual tank representation with animated water
-   - Water depth in millimeters
-   - Pressure in kPa
-   - Tank capacity in milliliters
-   - Tank fill percentage
-   - Online/offline status
+### LoRaWAN Path (Primary)
+1. Arduino reads pressure sensor on pin A0
+2. Converts voltage to pressure (0.5V-4.5V → 0-10 kPa)
+3. Calculates water depth from pressure (1 kPa ≈ 0.102m water)
+4. Calculates volume using cylinder formula: V = π × r² × h
+5. Packs data into 8-byte binary payload
+6. Transmits via LoRaWAN every 60 seconds (respects duty cycle)
+7. LoRaWAN gateway forwards to network server
+8. Network server decodes and forwards to application
 
-## Troubleshooting
-
-### Port 8080 already in use
-If you get "Address already in use" error, check what's using port 8080:
-```bash
-sudo lsof -i :8080
-```
-
-Kill the process or change to a different port in both `tank_server.py` and the Arduino sketch.
-
-### Arduino not connecting to WiFi
-- Check WiFi credentials are correct
-- Ensure WiFi network is 2.4GHz (UNO R4 WiFi doesn't support 5GHz)
-- Check signal strength near Arduino location
-
-### Server not receiving data
-- Verify Raspberry Pi IP is 192.168.55.192
-- Check firewall settings on Raspberry Pi
-- Test server is running: `curl http://192.168.55.192/data`
-
-### Dashboard shows "Offline"
-- Check Arduino serial monitor for errors
-- Verify server is running on Raspberry Pi
-- Check network connectivity between devices
-
-### Inaccurate readings
-- Calibrate pressure sensor if needed
-- Verify voltage reference (should be 5V)
-- Check sensor is submerged correctly
+### WiFi Path (Backup)
+1-4. Same sensor reading and calculations
+5. Sends data via HTTP GET every 5 seconds to local server
+6. Web dashboard displays real-time data
 
 ## Serial Monitor Output
 
-When Arduino is running, you should see output like:
+When Arduino is running, you should see:
+
 ```
-=== Water Tank Sensor with WiFi ===
-Tank diameter: 100 mm
-Tank depth: 200 mm
-Tank capacity: 1570.8 ml
-Connecting to WiFi: YourNetwork
-.....
+=== Water Tank Sensor with LoRaWAN + WiFi ===
+Tank diameter: 100mm
+Initializing LoRaWAN...
+AU915 FSB2 configured (channels 8-15, 65)
+Starting OTAA join...
+Connecting to WiFi backup...
 WiFi connected!
 IP address: 192.168.1.123
 
 --- Measurement ---
 Voltage: 2.345 V
 Pressure: 4.61 kPa
-Water Depth: 94.2 mm (0.094 m)
-Tank Capacity: 739.3 ml (0.739 liters)
-Tank Level: 47.1 %
+Water Depth: 0.094 m
+Tank Capacity: 0.74 liters
+LoRa Status: JOINED
 
-Connecting to server: 192.168.55.192
-Server response:
-HTTP/1.0 200 OK
-Data uploaded successfully!
+Packet queued for LoRaWAN transmission
+EV_TXCOMPLETE (includes waiting for RX windows)
+Data uploaded via WiFi!
 ```
+
+## Troubleshooting
+
+### LoRaWAN Join Fails (EV_JOIN_FAILED)
+- Verify credentials are correctly entered and in right byte order (LSB vs MSB)
+- Check that gateway is online and in range
+- Verify FSB2 is configured on both device and network server
+- Ensure AU915 region is selected on network server
+
+### No Data Received on Network Server
+- Check Serial Monitor for "EV_TXCOMPLETE" messages
+- Verify payload decoder is configured on network server
+- Check gateway traffic in network server console
+- Ensure device has successfully joined (look for "LoRa Status: JOINED")
+
+### Arduino Not Connecting to WiFi
+- Check WiFi credentials are correct
+- Ensure WiFi network is 2.4GHz (UNO R4 WiFi doesn't support 5GHz)
+- Check signal strength near Arduino location
+- WiFi is optional - LoRaWAN is primary connectivity
+
+### Inaccurate Readings
+- Calibrate pressure sensor if needed
+- Verify voltage reference (should be 5V)
+- Check sensor is submerged correctly
+- Ensure ADC_REF_V matches your board's actual voltage
 
 ## Customization
 
-### Change Upload Interval
-Edit this line in Arduino code:
+### Change LoRaWAN Upload Interval
 ```cpp
-const unsigned long uploadInterval = 5000;  // milliseconds
+const unsigned long loraUploadInterval = 60000;  // milliseconds (respect duty cycle!)
 ```
 
-### Change Tank Diameter and Depth
-Edit these lines in Arduino code:
+### Change WiFi Upload Interval
+```cpp
+const unsigned long wifiUploadInterval = 5000;  // milliseconds
+```
+
+### Change Tank Diameter
 ```cpp
 const float TANK_DIAMETER_MM = 100.0f;  // your tank diameter in mm
-const float TANK_DEPTH_MM = 200.0f;     // your tank maximum depth in mm
 ```
 
-You'll also need to update the HTML page:
-```javascript
-// In index.html, update the max depth for visual scaling
-const maxDepthM = 0.2;  // your tank depth in meters (200mm = 0.2m)
+## Documentation
+
+- **[docs/CLAUDE.md](docs/CLAUDE.md)** - Development guide for Claude Code
+- **[docs/LORAWAN_SETUP.md](docs/LORAWAN_SETUP.md)** - LoRaWAN configuration guide (MUST READ)
+- **[platformio.ini](platformio.ini)** - PlatformIO build configuration
+
+## Project Structure
+
 ```
-
-And update the subtitle:
-```html
-<p class="subtitle">100mm Ø × 200mm Deep Tank</p>  <!-- your dimensions -->
+water-tank-monitor/
+├── water_tank_monitor.ino    # Primary Arduino sketch
+├── src/main.cpp               # PlatformIO build source (copy of .ino)
+├── platformio.ini             # PlatformIO configuration
+├── test/                      # Native unit tests
+├── docs/                      # Documentation
+│   ├── CLAUDE.md
+│   └── LORAWAN_SETUP.md
+└── README.md                  # This file
 ```
-
-### Change Server Port
-The default port is 8080. To use a different port, change in Arduino code:
-```cpp
-const int serverPort = 8080;  // your preferred port
-```
-
-And in Python server:
-```python
-PORT = 8080
-```
-
-**Note:** Ports below 1024 (like port 80) require sudo/root privileges.
-
-## Data Format
-
-Arduino sends data via HTTP GET with these parameters:
-- `depth` - Water depth in meters (3 decimal places)
-- `pressure` - Pressure in kPa (2 decimal places)
-- `volume` - Volume in liters (3 decimal places)
-
-Example: `/update?depth=0.094&pressure=4.61&volume=0.739`
-
-The web dashboard converts these for display:
-- Depth: meters → millimeters
-- Volume: liters → milliliters
 
 ## License
 
-Free to use and modify for personal projects.
+Open source - use freely for your projects.

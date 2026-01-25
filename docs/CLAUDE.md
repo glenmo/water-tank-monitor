@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a PlatformIO-based Arduino project for water tank monitoring using dual connectivity: LoRaWAN (primary) and WiFi (backup). The project is designed for Arduino R4 WiFi boards with SX1276 LoRaWAN shield and includes a native testing framework.
 
-**Current Status**: The project is in initial setup phase. The platformio.ini configuration file needs to be created, and the testing infrastructure needs to be implemented.
+**Current Status**: Fully configured with LoRaWAN support. The main sketch is at the root level for easy Arduino IDE access, with PlatformIO build support via src/main.cpp.
 
 ## Development Commands
 
@@ -19,7 +19,7 @@ pio run
 pio run --target upload
 
 # Build for specific environment
-pio run -e water_tank_sensor_wifi_2
+pio run -e uno_r4_wifi
 
 # Clean build files
 pio run --target clean
@@ -50,20 +50,23 @@ pio device monitor -b 115200
 
 ### Project Structure
 
-- `water_tank_sensor_wifi_2/water_tank_sensor_wifi/` - Main Arduino firmware source
-  - `water_tank_sensor_wifi.ino` - Primary Arduino sketch with all functionality
-
+- `water_tank_monitor.ino` - **Primary Arduino sketch** (root level for Arduino IDE compatibility)
+- `src/main.cpp` - PlatformIO build source (copy of .ino file)
 - `test/` - Native unit tests (runs on host machine, not Arduino)
   - `test_main.cpp` - Test entry point (needs implementation)
   - `test_functions.cpp` / `test_functions.h` - Test implementations (needs implementation)
-  - `mocks/` - Mock implementations of Arduino APIs for native testing (needs implementation)
+  - `mocks/` - Mock implementations of Arduino APIs for native testing
     - `Arduino.h` - Mock Arduino core functions
     - `WiFiS3.h` - Mock WiFi library for Arduino R4 WiFi
     - `mocks.cpp` - Mock implementations
+- `docs/` - Documentation
+  - `CLAUDE.md` - This file
+  - `LORAWAN_SETUP.md` - LoRaWAN configuration guide
+- `platformio.ini` - PlatformIO configuration
 
 ### Core Functionality
 
-The main sketch (`water_tank_sensor_wifi.ino`) implements:
+The main sketch (`water_tank_monitor.ino`) implements:
 
 1. **Sensor Reading**: Reads analog voltage from A0 pin, averages 10 samples to reduce noise
 2. **Pressure Calculation**: Converts voltage (0.5-4.5V range) to pressure (0-10 kPa)
@@ -136,7 +139,7 @@ function Decoder(bytes, port) {
 ### Configuration Requirements
 
 The `platformio.ini` file needs to define:
-- `[env:water_tank_sensor_wifi_2]` - Arduino UNO R4 WiFi board configuration
+- `[env:uno_r4_wifi]` - Arduino UNO R4 WiFi board configuration
 - `[env:native]` - Native testing environment with Unity framework
 - Include paths for test mocks
 - Library dependencies:

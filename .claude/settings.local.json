@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pio run:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(python3:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd LoRaWAN support with dual connectivity \\(LoRaWAN + WiFi\\)\n\n- Integrated MCCI LoRaWAN LMIC library for SX1276 shield\n- Configured AU915 region with FSB2 channel plan \\(channels 8-15, 65\\)\n- Implemented OTAA \\(Over-The-Air Activation\\) for secure network join\n- Added compact 8-byte binary payload format for efficient transmission\n- Dual connectivity: LoRaWAN \\(60s interval\\) + WiFi backup \\(5s interval\\)\n- Created comprehensive LoRaWAN setup guide \\(LORAWAN_SETUP.md\\)\n- Updated project documentation \\(CLAUDE.md\\)\n- Configured PlatformIO build system with proper dependencies\n- Added water tank sensor monitoring with pressure-to-depth conversion\n\nHardware configuration:\n- Arduino UNO R4 WiFi\n- SX1276 LoRaWAN shield \\(NSS=10, RST=9, DIO0=2, DIO1=3\\)\n- Pressure sensor on A0 pin\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(git reset:*)",
+      "Bash(tree:*)"
+    ]
+  }
+}

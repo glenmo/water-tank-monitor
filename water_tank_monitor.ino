@@ -8,15 +8,21 @@
 // These should be in LSB format for APPEUI and DEVEUI, MSB for APPKEY
 
 // Application EUI (8 bytes) - LSB format
-static const u1_t PROGMEM APPEUI[8] = { 0xee, 0x39, 0xcf, 0x66, 0xb6, 0x0c, 0xf7, 0x77 };
+// IMPORTANT: Replace with your actual AppEUI from network server
+static const u1_t PROGMEM APPEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
 // Device EUI (8 bytes) - LSB format
-static const u1_t PROGMEM DEVEUI[8] = { 0x14, 0xe2, 0x7f, 0x36, 0xa7, 0xab, 0x8d, 0x6c };                                      
+// IMPORTANT: Replace with your actual DevEUI from network server
+static const u1_t PROGMEM DEVEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
-// Application Key (16 bytes) - MSB format
-static const u1_t PROGMEM APPKEY[16] = { 0xe9, 0xb3, 0xf0, 0x02, 0x64, 0x51, 0xa9, 0x38, 0xd4, 0x64, 0x10, 0x3a, 0x4d, 0x25, 0xaa, 0x14 };
+// Application Key (16 bytes) - MSB format (do NOT reverse)
+// IMPORTANT: Replace with your actual AppKey from network server
+static const u1_t PROGMEM APPKEY[16] = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
 void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16);}
 
 // Pin mapping for SX1276 LoRa shield on Arduino UNO R4 WiFi

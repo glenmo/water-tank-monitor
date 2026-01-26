@@ -7,18 +7,18 @@
 // IMPORTANT: Replace these with your actual credentials from The Things Network/ChirpStack
 // These should be in LSB format for APPEUI and DEVEUI, MSB for APPKEY
 
-// Application EUI (8 bytes) - LSB format
-// IMPORTANT: Replace with your actual AppEUI from network server
-static const u1_t PROGMEM APPEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+// Application EUI / JoinEUI (8 bytes) - LSB format
+// JoinEUI: 2CF7F1177440004B (LSB for LMIC)
+static const u1_t PROGMEM APPEUI[8] = { 0x4B, 0x00, 0x40, 0x74, 0x17, 0xF1, 0xF7, 0x2C };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8);}
 
 // Device EUI (8 bytes) - LSB format
-// IMPORTANT: Replace with your actual DevEUI from network server
-static const u1_t PROGMEM DEVEUI[8] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+// DevEUI: 2CF7F1177440004B (LSB for LMIC)
+static const u1_t PROGMEM DEVEUI[8] = { 0x4B, 0x00, 0x40, 0x74, 0x17, 0xF1, 0xF7, 0x2C };
 void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8);}
 
 // Application Key (16 bytes) - MSB format (do NOT reverse)
-// IMPORTANT: Replace with your actual AppKey from network server
+// IMPORTANT: Replace with your actual AppKey from ChirpStack.
 static const u1_t PROGMEM APPKEY[16] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
@@ -327,22 +327,15 @@ void setup() {
   LMIC_reset();
 
   // Configure for AU915 region
-  // For AU915, we need to select FSB2 (channels 8-15 + channel 65)
-  // Disable all 72 channels
-  for (int c = 0; c < 72; c++) {
-    LMIC_disableChannel(c);
-  }
-  // Enable FSB2 channels (8-15)
-  for (int c = 8; c < 16; c++) {
-    LMIC_enableChannel(c);
-  }
-  // Enable channel 65 (500kHz channel for FSB2)
-  LMIC_enableChannel(65);
-
+  // For AU915, select FSB2 (channels 8-15 + channel 65)
+  LMIC_selectSubBand(1);  // Subband index 1 => FSB2
   Serial.println(F("AU915 FSB2 configured (channels 8-15, 65)"));
 
   // Set data rate and transmit power for AU915
   LMIC_setDrTxpow(DR_SF7, 14);  // SF7, 14dBm
+
+  // Allow additional clock error (helps with some R4 timing/join issues)
+  LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
 
   // Start OTAA join
   Serial.println(F("Starting OTAA join..."));

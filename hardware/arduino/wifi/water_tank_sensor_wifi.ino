@@ -1,6 +1,4 @@
-// CRITICAL: Define region BEFORE includes
-#define CFG_au915 1
-#define CFG_sx1276_radio 1
+// LMIC region - define ONE only
 
 #include <WiFiS3.h>
 #include <lmic.h>
@@ -8,13 +6,16 @@
 #include <SPI.h>
 
 const lmic_pinmap lmic_pins = {
-  .nss = 10,
+  .nss = 10,                          // SPI CS
   .rxtx = LMIC_UNUSED_PIN,
-  .rst = 9,
-  .dio = { 2, 3, LMIC_UNUSED_PIN }
+  .rst = 9,                           // RESET
+  .dio = { 2, 6, LMIC_UNUSED_PIN }   // DIO0 = 2, DIO1 = 6, DIO2
 };
 
+
 // -------------------- OTAA KEYS --------------------
+// APPEUI and DEVEUI are LSB for LMIC; APPKEY is MSB (as you have it).
+
 static const u1_t PROGMEM APPEUI[8] = { 0xee, 0x39, 0xcf, 0x66, 0xb6, 0x0c, 0xf7, 0x77 };
 void os_getArtEui (u1_t* buf) { memcpy_P(buf, APPEUI, 8); }
 
@@ -24,11 +25,14 @@ void os_getDevEui (u1_t* buf) { memcpy_P(buf, DEVEUI, 8); }
 static const u1_t PROGMEM APPKEY[16] = { 0xe9, 0xb3, 0xf0, 0x02, 0x64, 0x51, 0xa9, 0x38, 0xd4, 0x64, 0x10, 0x3a, 0x4d, 0x25, 0xaa, 0x14 };
 void os_getDevKey (u1_t* buf) { memcpy_P(buf, APPKEY, 16); }
 
+
 // -------------------- WiFi (backup) --------------------
 const char* ssid = "IOT";
 const char* password = "GU23enY5!";
+
 const char* serverHost = "192.168.55.192";
 const int serverPort = 8080;
+
 WiFiClient client;
 
 // -------------------- Sensor config --------------------
@@ -53,7 +57,7 @@ static osjob_t sendjob;
 bool loraJoined = false;
 bool loraSending = false;
 
-// Payload
+// Payload (8 bytes used)
 static uint8_t loraPayload[8];
 
 // -------------------- Utility --------------------
@@ -81,35 +85,6 @@ float readA0VoltageAveraged() {
   }
   float avgRaw = sum / (float)samples;
   return (avgRaw * ADC_REF_V) / (float)ADC_MAX;
-}
-
-static const int MEDIAN_SAMPLES = 51;
-
-float readA0VoltageMedian(int samples = MEDIAN_SAMPLES) {
-  if (samples < 5) samples = 5;
-  if (samples > 101) samples = 101;
-  if ((samples % 2) == 0) samples++;
-
-  static int vals[101];
-
-  for (int i = 0; i < samples; i++) {
-    vals[i] = analogRead(A0);
-    delay(2);
-  }
-
-  // insertion sort
-  for (int i = 1; i < samples; i++) {
-    int key = vals[i];
-    int j = i - 1;
-    while (j >= 0 && vals[j] > key) {
-      vals[j + 1] = vals[j];
-      j--;
-    }
-    vals[j + 1] = key;
-  }
-
-  int med = vals[samples / 2];
-  return ((float)med * ADC_REF_V) / (float)ADC_MAX;
 }
 
 // -------------------- WiFi --------------------
@@ -150,6 +125,7 @@ void sendDataViaWiFi(float voltage, float kpa, float waterDepthM, float volumeL)
     return;
   }
 
+  // Build GET request with URL parameters
   String url = "/api/sensor-data?voltage=" + String(voltage, 3) +
                "&pressure_kpa=" + String(kpa, 3) +
                "&water_depth_m=" + String(waterDepthM, 3) +
@@ -163,7 +139,8 @@ void sendDataViaWiFi(float voltage, float kpa, float waterDepthM, float volumeL)
   client.println("Connection: close");
   client.println();
 
-  Serial.println(F("HTTP GET request sent"));
+  Serial.println(F("HTTP GET request sent:"));
+  Serial.println(url);
 
   delay(100);
   while (client.available()) {
@@ -178,7 +155,7 @@ void do_send(osjob_t* j) {
   if (LMIC.opmode & OP_TXRXPEND) {
     Serial.println(F("OP_TXRXPEND, not sending"));
   } else {
-    float v = readA0VoltageMedian();
+    float v = readA0VoltageAveraged();
     float kpa = voltageToKpa(v);
     float rho = 1000.0f;
     float g = 9.81f;
@@ -187,6 +164,7 @@ void do_send(osjob_t* j) {
     float vol_m3 = 3.14159f * TANK_RADIUS_M * TANK_RADIUS_M * depth_m;
     float vol_L = vol_m3 * 1000.0f;
 
+    // Pack data into 8 bytes
     uint16_t v_encoded = (uint16_t)(v * 1000.0f);
     uint16_t kpa_encoded = (uint16_t)(kpa * 1000.0f);
     uint16_t depth_encoded = (uint16_t)(depth_m * 1000.0f);
@@ -214,149 +192,152 @@ void onEvent(ev_t ev) {
   Serial.print(os_getTime());
   Serial.print(": ");
   switch(ev) {
+    case EV_SCAN_TIMEOUT:
+      Serial.println(F("EV_SCAN_TIMEOUT"));
+      break;
+    case EV_BEACON_FOUND:
+      Serial.println(F("EV_BEACON_FOUND"));
+      break;
+    case EV_BEACON_MISSED:
+      Serial.println(F("EV_BEACON_MISSED"));
+      break;
+    case EV_BEACON_TRACKED:
+      Serial.println(F("EV_BEACON_TRACKED"));
+      break;
     case EV_JOINING:
       Serial.println(F("EV_JOINING"));
       break;
     case EV_JOINED:
-      Serial.println(F("✓✓✓ EV_JOINED ✓✓✓"));
+      Serial.println(F("EV_JOINED"));
       loraJoined = true;
       LMIC_setLinkCheckMode(0);
       break;
     case EV_JOIN_FAILED:
-      Serial.println(F("✗ EV_JOIN_FAILED"));
+      Serial.println(F("EV_JOIN_FAILED"));
       break;
     case EV_REJOIN_FAILED:
-      Serial.println(F("✗ EV_REJOIN_FAILED"));
+      Serial.println(F("EV_REJOIN_FAILED"));
       break;
     case EV_TXCOMPLETE:
-      Serial.println(F("EV_TXCOMPLETE"));
+      Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
       if (LMIC.txrxFlags & TXRX_ACK)
-        Serial.println(F("  Received ack"));
+        Serial.println(F("Received ack"));
       if (LMIC.dataLen) {
-        Serial.print(F("  Received "));
+        Serial.print(F("Received "));
         Serial.print(LMIC.dataLen);
-        Serial.println(F(" bytes"));
+        Serial.println(F(" bytes of payload"));
       }
       loraSending = false;
       break;
+    case EV_LOST_TSYNC:
+      Serial.println(F("EV_LOST_TSYNC"));
+      break;
+    case EV_RESET:
+      Serial.println(F("EV_RESET"));
+      break;
+    case EV_RXCOMPLETE:
+      Serial.println(F("EV_RXCOMPLETE"));
+      break;
+    case EV_LINK_DEAD:
+      Serial.println(F("EV_LINK_DEAD"));
+      break;
+    case EV_LINK_ALIVE:
+      Serial.println(F("EV_LINK_ALIVE"));
+      break;
     case EV_TXSTART:
-      Serial.print(F("EV_TXSTART - Freq: "));
-      Serial.print(LMIC.freq);
-      Serial.print(F(" Hz, DR: DR"));
-      Serial.println(LMIC.datarate);
+      Serial.println(F("EV_TXSTART"));
       loraSending = true;
       break;
+    case EV_TXCANCELED:
+      Serial.println(F("EV_TXCANCELED"));
+      loraSending = false;
+      break;
+    case EV_RXSTART:
+      Serial.println(F("EV_RXSTART"));
+      break;
     case EV_JOIN_TXCOMPLETE:
-      Serial.println(F("EV_JOIN_TXCOMPLETE - Join request sent"));
+      Serial.println(F("EV_JOIN_TXCOMPLETE: no JoinAccept"));
       break;
     default:
-      Serial.print(F("Event: "));
+      Serial.print(F("Unknown event: "));
       Serial.println((unsigned) ev);
       break;
   }
 }
 
-// -------------------- setup() --------------------
+// -------------------- setup() and loop() --------------------
 void setup() {
   Serial.begin(115200);
-  while (!Serial);
-  
-  Serial.println(F("\n========================================"));
-  Serial.println(F("  Water Tank Sensor - LoRa + WiFi"));
-  Serial.println(F("========================================\n"));
-  
-  // ===== SPI TEST FOR SX1276 =====
-  Serial.println(F("--- Testing LoRa Radio (SX1276) ---"));
-  
-  pinMode(10, OUTPUT);  // NSS/CS
-  digitalWrite(10, HIGH);
-  pinMode(9, OUTPUT);   // RST
-  digitalWrite(9, HIGH);
-  
-  SPI.begin();
-  
-  // Hardware reset
-  Serial.println(F("Resetting radio..."));
-  digitalWrite(9, LOW);
-  delay(100);
-  digitalWrite(9, HIGH);
-  delay(100);
-  
-  // Read version register (0x42)
-  digitalWrite(10, LOW);
-  SPI.transfer(0x42 & 0x7F);
-  uint8_t version = SPI.transfer(0x00);
-  digitalWrite(10, HIGH);
-  
-  Serial.print(F("SX1276 Version: 0x"));
-  Serial.println(version, HEX);
-  
-  if (version == 0x12) {
-    Serial.println(F("✓ SX1276 radio detected!"));
-  } else if (version == 0x00 || version == 0xFF) {
-    Serial.println(F("✗ NO RESPONSE from radio!"));
-    Serial.println(F("  Check:"));
-    Serial.println(F("  - Shield is properly seated"));
-    Serial.println(F("  - No bent pins"));
-    Serial.println(F("  - Antenna connected"));
-    while(1) { 
-      delay(1000);
-      Serial.println(F("HALTED - Fix hardware issue"));
-    }
-  } else {
-    Serial.print(F("⚠ Unexpected version: 0x"));
-    Serial.println(version, HEX);
-    Serial.println(F("  Continuing anyway..."));
+  while (!Serial) {
+    ; // Wait for serial port to connect
   }
-  
-  Serial.println();
-  
-  // ===== INITIALIZE LORAWAN =====
-  Serial.println(F("--- Initializing LoRaWAN ---"));
+
+  Serial.println(F("\n=== Water Tank Sensor with LoRaWAN + WiFi ==="));
+  Serial.print(F("Tank diameter: "));
+  Serial.print(TANK_DIAMETER_MM);
+  Serial.println(F(" mm"));
+
+  // Initialize LoRaWAN
+  Serial.println(F("Initializing LoRaWAN..."));
   os_init();
   LMIC_reset();
-  
-  // Use sub-band 2 (channels 8-15) for AU915
-  Serial.println(F("Configuring AU915 sub-band 2..."));
-  LMIC_selectSubBand(1);
-  
-  LMIC_setDrTxpow(DR_SF7, 14);
-  LMIC_setClockError(MAX_CLOCK_ERROR * 20 / 100);
-  
+
+  // Configure for AU915 region - select FSB2 (channels 8-15 + channel 65)
+  // Disable all 72 channels first
+  for (int c = 0; c < 72; c++) {
+    LMIC_disableChannel(c);
+  }
+  // Enable FSB2 channels (8-15)
+  for (int c = 8; c < 16; c++) {
+    LMIC_enableChannel(c);
+  }
+  // Enable channel 65 (500kHz channel for FSB2)
+  LMIC_enableChannel(65);
+  Serial.println(F("AU915 FSB2 configured (channels 8-15, 65)"));
+
+  // Set data rate and transmit power for AU915
+  LMIC_setDrTxpow(DR_SF7, 14);  // SF7, 14dBm
+
+  // Allow additional clock error (helps with some R4 timing/join issues)
+  LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100);
+
+  // Start OTAA join
   Serial.println(F("Starting OTAA join..."));
   LMIC_startJoining();
-  
-  // ===== CONNECT WIFI =====
-  Serial.println();
-  Serial.println(F("--- Connecting WiFi Backup ---"));
+
+  // Connect to WiFi as backup
+  Serial.println(F("Connecting to WiFi backup..."));
   connectWiFi();
-  
-  Serial.println();
-  Serial.println(F("========================================"));
-  Serial.println(F("  Setup Complete - Monitoring Started"));
-  Serial.println(F("========================================\n"));
+
+  Serial.println(F("Setup complete. Starting measurements...\n"));
 }
 
 void loop() {
+  // Process LoRaWAN events (CRITICAL - must be called frequently)
   os_runloop_once();
 
-  // static unsigned long lastWiFiCheck = 0;
-  // if (millis() - lastWiFiCheck > 30000) {
-  //   if (WiFi.status() != WL_CONNECTED) connectWiFi();
-  //   lastWiFiCheck = millis();
-  // }
+  // Ensure WiFi is connected (backup)
+  static unsigned long lastWiFiCheck = 0;
+  if (millis() - lastWiFiCheck > 30000) {  // Check every 30 seconds
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println(F("WiFi disconnected. Reconnecting..."));
+      connectWiFi();
+    }
+    lastWiFiCheck = millis();
+  }
 
+  // Send data via LoRa if joined and interval elapsed
   unsigned long now = millis();
-
   if (loraJoined && !loraSending && (now - lastLoRaUploadTime >= loraUploadInterval)) {
     lastLoRaUploadTime = now;
     do_send(&sendjob);
   }
 
+  // Send data via WiFi at different interval
   if (now - lastWiFiUploadTime >= wifiUploadInterval) {
     lastWiFiUploadTime = now;
 
-    float v = readA0VoltageMedian();
+    float v = readA0VoltageAveraged();
     float kpa = voltageToKpa(v);
     float rho = 1000.0f;
     float g = 9.81f;
@@ -367,3 +348,4 @@ void loop() {
     sendDataViaWiFi(v, kpa, depth_m, vol_L);
   }
 }
+
